@@ -111,3 +111,17 @@ export function submitTestResult(sampleId: string, testId: string, input: { resu
     { method: 'POST', body: JSON.stringify(input) }
   );
 }
+
+export function approveSample(sampleId: string, password: string) {
+  return apiFetch<{ ok: true; message: string }>(`/api/mobile/samples/${encodeURIComponent(sampleId)}/approve`, {
+    method: 'POST',
+    body: JSON.stringify({ password }),
+  });
+}
+
+export function rejectSample(sampleId: string, password: string) {
+  return apiFetch<{ ok: true; message: string }>(`/api/mobile/samples/${encodeURIComponent(sampleId)}/reject`, {
+    method: 'POST',
+    body: JSON.stringify({ password }),
+  });
+}

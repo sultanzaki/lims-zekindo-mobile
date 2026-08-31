@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
-import { addTestReading, deleteTestReading, submitTestResult } from '@/lib/samples-api';
+import { addTestReading, approveSample, deleteTestReading, rejectSample, submitTestResult } from '@/lib/samples-api';
 
 export function useAddTestReading(sampleId: string) {
   const queryClient = useQueryClient();
@@ -33,6 +33,28 @@ export function useSubmitTestResult(sampleId: string) {
   return useMutation({
     mutationFn: ({ testId, result, notes }: { testId: string; result: string; notes?: string }) =>
       submitTestResult(sampleId, testId, { result, notes }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['sample', sampleId] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+    },
+  });
+}
+
+export function useApproveSample(sampleId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (password: string) => approveSample(sampleId, password),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['sample', sampleId] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+    },
+  });
+}
+
+export function useRejectSample(sampleId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (password: string) => rejectSample(sampleId, password),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['sample', sampleId] });
       queryClient.invalidateQueries({ queryKey: ['dashboard'] });

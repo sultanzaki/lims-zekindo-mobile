@@ -6,9 +6,17 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import { useSampleDetail } from '@/hooks/use-sample-detail';
-import { useSubmitTestResult, useAddTestReading, useDeleteTestReading } from '@/hooks/use-sample-mutations';
+import {
+  useSubmitTestResult,
+  useAddTestReading,
+  useDeleteTestReading,
+  useApproveSample,
+  useRejectSample,
+} from '@/hooks/use-sample-mutations';
 import { useTheme } from '@/hooks/use-theme';
-import type { CustodyEvent, SampleAttachment, SampleTest } from '@/lib/samples-api';
+import { useAuth } from '@/lib/auth-context';
+import { canApproveAsQa, canReviewAsSupervisor } from '@/lib/roles';
+import type { CustodyEvent, SampleAttachment, SampleDetail, SampleTest } from '@/lib/samples-api';
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -187,6 +195,83 @@ function PendingTestCard({ sampleId, test }: { sampleId: string; test: SampleTes
   );
 }
 
+function ApprovalSection({ sample, userRole }: { sample: SampleDetail; userRole: string }) {
+  const theme = useTheme();
+  const [action, setAction] = useState<'approve' | 'reject' | null>(null);
+  const [password, setPassword] = useState('');
+  const approveMutation = useApproveSample(sample.id);
+  const rejectMutation = useRejectSample(sample.id);
+
+  const canAct =
+    (sample.status === 'Awaiting Supervisor Review' && canReviewAsSupervisor(userRole)) ||
+    (sample.status === 'Awaiting QA Approval' && canApproveAsQa(userRole));
+
+  if (!canAct) return null;
+
+  const mutation = action === 'reject' ? rejectMutation : approveMutation;
+
+  const reset = () => {
+    setAction(null);
+    setPassword('');
+  };
+
+  const handleConfirm = () => {
+    if (!password || !action) return;
+    (action === 'approve' ? approveMutation : rejectMutation).mutate(password, { onSuccess: reset });
+  };
+
+  return (
+    <Section title="Review">
+      {action === null ? (
+        <View style={styles.reviewButtonRow}>
+          <Pressable
+            style={[styles.reviewButton, { backgroundColor: theme.backgroundSelected }]}
+            onPress={() => setAction('approve')}>
+            <ThemedText type="smallBold">Approve</ThemedText>
+          </Pressable>
+          <Pressable
+            style={[styles.reviewButton, { backgroundColor: theme.backgroundElement }]}
+            onPress={() => setAction('reject')}>
+            <ThemedText type="smallBold" style={styles.errorText}>
+              Reject
+            </ThemedText>
+          </Pressable>
+        </View>
+      ) : (
+        <ThemedView type="backgroundElement" style={styles.reviewConfirmCard}>
+          <ThemedText type="small" themeColor="textSecondary">
+            Enter your password to {action} this sample.
+          </ThemedText>
+          <TextInput
+            style={[styles.input, { color: theme.text, borderColor: theme.backgroundSelected }]}
+            placeholder="Password"
+            placeholderTextColor={theme.textSecondary}
+            secureTextEntry
+            value={password}
+            onChangeText={setPassword}
+          />
+          {mutation.isError && (
+            <ThemedText type="small" style={styles.errorText}>
+              {mutation.error instanceof Error ? mutation.error.message : 'Action failed.'}
+            </ThemedText>
+          )}
+          <View style={styles.reviewButtonRow}>
+            <Pressable
+              style={[styles.reviewButton, { backgroundColor: theme.backgroundSelected, opacity: password ? 1 : 0.5 }]}
+              disabled={!password || mutation.isPending}
+              onPress={handleConfirm}>
+              <ThemedText type="smallBold">{mutation.isPending ? 'Submitting…' : `Confirm ${action}`}</ThemedText>
+            </Pressable>
+            <Pressable style={styles.reviewButton} onPress={reset}>
+              <ThemedText type="smallBold">Cancel</ThemedText>
+            </Pressable>
+          </View>
+        </ThemedView>
+      )}
+    </Section>
+  );
+}
+
 function TestRow({ test }: { test: SampleTest }) {
   return (
     <ThemedView type="backgroundElement" style={styles.rowCard}>
@@ -235,6 +320,7 @@ function AttachmentRow({ attachment }: { attachment: SampleAttachment }) {
 
 export default function SampleDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
+  const { user } = useAuth();
   const { data, isLoading, isError, error } = useSampleDetail(id);
   const sample = data?.sample;
 
@@ -272,6 +358,8 @@ export default function SampleDetailScreen() {
                   <ThemedText type="smallBold">{sample.status}</ThemedText>
                 </ThemedView>
               </View>
+
+              {user && <ApprovalSection sample={sample} userRole={user.accessRole} />}
 
               <Section title="Tests">
                 {sample.tests.length === 0 ? (
@@ -421,5 +509,20 @@ const styles = StyleSheet.create({
     borderRadius: Spacing.two,
     paddingHorizontal: Spacing.three,
     paddingVertical: Spacing.two,
+  },
+  reviewButtonRow: {
+    flexDirection: 'row',
+    gap: Spacing.two,
+  },
+  reviewButton: {
+    flex: 1,
+    borderRadius: Spacing.two,
+    paddingVertical: Spacing.two,
+    alignItems: 'center',
+  },
+  reviewConfirmCard: {
+    borderRadius: Spacing.three,
+    padding: Spacing.three,
+    gap: Spacing.two,
   },
 });
