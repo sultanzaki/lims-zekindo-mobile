@@ -30,6 +30,16 @@ export type SampleAttachment = {
   url: string | null;
 };
 
+export type TestReading = {
+  id: string;
+  intervalLabel: string | null;
+  replicateIndex: number | null;
+  value: string;
+  note: string | null;
+  enteredBy: string;
+  takenAt: string;
+};
+
 export type SampleTest = {
   id: string;
   name: string;
@@ -43,6 +53,7 @@ export type SampleTest = {
   replicateCount: number | null;
   intervalPlan: string | null;
   attachments: SampleAttachment[];
+  readings: TestReading[];
 };
 
 export type CustodyEvent = {
@@ -74,4 +85,29 @@ export type SampleDetail = {
 
 export function fetchSampleDetail(id: string) {
   return apiFetch<{ ok: true; sample: SampleDetail }>(`/api/mobile/samples/${encodeURIComponent(id)}`);
+}
+
+export function addTestReading(
+  sampleId: string,
+  testId: string,
+  input: { value: string; intervalLabel?: string | null; replicateIndex?: number | null; note?: string | null }
+) {
+  return apiFetch<{ ok: true }>(
+    `/api/mobile/samples/${encodeURIComponent(sampleId)}/tests/${encodeURIComponent(testId)}/readings`,
+    { method: 'POST', body: JSON.stringify(input) }
+  );
+}
+
+export function deleteTestReading(sampleId: string, testId: string, readingId: string) {
+  return apiFetch<{ ok: true }>(
+    `/api/mobile/samples/${encodeURIComponent(sampleId)}/tests/${encodeURIComponent(testId)}/readings`,
+    { method: 'DELETE', body: JSON.stringify({ readingId }) }
+  );
+}
+
+export function submitTestResult(sampleId: string, testId: string, input: { result: string; notes?: string }) {
+  return apiFetch<{ ok: true }>(
+    `/api/mobile/samples/${encodeURIComponent(sampleId)}/tests/${encodeURIComponent(testId)}/submit`,
+    { method: 'POST', body: JSON.stringify(input) }
+  );
 }
