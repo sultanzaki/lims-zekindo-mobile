@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "LIMS Zekindo",
-    "slug": "lims-zekindo-mobile",
+    "slug": "lims-zekindo",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
