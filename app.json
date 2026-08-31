@@ -38,6 +38,13 @@
         {
           "cameraPermission": "LIMS Zekindo uses the camera to scan sample QR/barcode labels."
         }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "LIMS Zekindo uses your photos to attach supporting documentation to a test.",
+          "cameraPermission": "LIMS Zekindo uses the camera to attach a photo to a test."
+        }
       ]
     ],
     "experiments": {

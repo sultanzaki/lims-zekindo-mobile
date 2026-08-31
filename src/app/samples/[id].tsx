@@ -1,3 +1,4 @@
+import * as ImagePicker from 'expo-image-picker';
 import { Stack, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { Linking, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
@@ -10,6 +11,7 @@ import {
   useSubmitTestResult,
   useAddTestReading,
   useDeleteTestReading,
+  useUploadTestAttachment,
   useApproveSample,
   useRejectSample,
 } from '@/hooks/use-sample-mutations';
@@ -148,11 +150,40 @@ function ReadingsEntry({ sampleId, test }: { sampleId: string; test: SampleTest 
   );
 }
 
+async function pickAndUploadAttachment(
+  source: 'camera' | 'library',
+  testId: string,
+  upload: ReturnType<typeof useUploadTestAttachment>
+) {
+  const permission =
+    source === 'camera'
+      ? await ImagePicker.requestCameraPermissionsAsync()
+      : await ImagePicker.requestMediaLibraryPermissionsAsync();
+  if (!permission.granted) return;
+
+  const result =
+    source === 'camera'
+      ? await ImagePicker.launchCameraAsync({ quality: 0.7 })
+      : await ImagePicker.launchImageLibraryAsync({ quality: 0.7 });
+  if (result.canceled || !result.assets?.[0]) return;
+
+  const asset = result.assets[0];
+  upload.mutate({
+    testId,
+    asset: {
+      uri: asset.uri,
+      name: asset.fileName || `photo-${Date.now()}.jpg`,
+      type: asset.mimeType || 'image/jpeg',
+    },
+  });
+}
+
 function PendingTestCard({ sampleId, test }: { sampleId: string; test: SampleTest }) {
   const theme = useTheme();
   const [result, setResult] = useState('');
   const [notes, setNotes] = useState('');
   const submitResult = useSubmitTestResult(sampleId);
+  const uploadAttachment = useUploadTestAttachment(sampleId);
 
   return (
     <ThemedView type="backgroundElement" style={styles.testCard}>
@@ -162,6 +193,26 @@ function PendingTestCard({ sampleId, test }: { sampleId: string; test: SampleTes
       </ThemedText>
 
       {test.resultMode === 'MULTI' && <ReadingsEntry sampleId={sampleId} test={test} />}
+
+      <View style={styles.reviewButtonRow}>
+        <Pressable
+          style={[styles.reviewButton, { backgroundColor: theme.background }]}
+          disabled={uploadAttachment.isPending}
+          onPress={() => pickAndUploadAttachment('camera', test.id, uploadAttachment)}>
+          <ThemedText type="small">{uploadAttachment.isPending ? 'Uploading…' : 'Take photo'}</ThemedText>
+        </Pressable>
+        <Pressable
+          style={[styles.reviewButton, { backgroundColor: theme.background }]}
+          disabled={uploadAttachment.isPending}
+          onPress={() => pickAndUploadAttachment('library', test.id, uploadAttachment)}>
+          <ThemedText type="small">Choose photo</ThemedText>
+        </Pressable>
+      </View>
+      {uploadAttachment.isError && (
+        <ThemedText type="small" style={styles.errorText}>
+          {uploadAttachment.error instanceof Error ? uploadAttachment.error.message : 'Upload failed.'}
+        </ThemedText>
+      )}
 
       <ThemedText type="small" themeColor="textSecondary" style={styles.resultLabel}>
         Final result

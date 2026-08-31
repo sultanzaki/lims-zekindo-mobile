@@ -10,10 +10,14 @@ export class ApiError extends Error {
 }
 
 async function request(path: string, token: string | null, options: RequestInit) {
+  // A FormData body (multipart upload) must NOT get a manual Content-Type —
+  // fetch sets its own with the correct multipart boundary. Forcing
+  // application/json here would break the server's request.formData() parse.
+  const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData;
   return fetch(`${apiUrl()}${path}`, {
     ...options,
     headers: {
-      'Content-Type': 'application/json',
+      ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...options.headers,
     },

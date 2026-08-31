@@ -125,3 +125,20 @@ export function rejectSample(sampleId: string, password: string) {
     body: JSON.stringify({ password }),
   });
 }
+
+export function uploadTestAttachment(
+  sampleId: string,
+  testId: string,
+  asset: { uri: string; name: string; type: string }
+) {
+  const form = new FormData();
+  // React Native's FormData accepts this { uri, name, type } shape directly
+  // (unlike web, which needs an actual File/Blob) — fetch turns it into a
+  // real multipart file part.
+  form.append('file', { uri: asset.uri, name: asset.name, type: asset.type } as unknown as Blob);
+
+  return apiFetch<{ ok: true }>(
+    `/api/mobile/samples/${encodeURIComponent(sampleId)}/tests/${encodeURIComponent(testId)}/attachments`,
+    { method: 'POST', body: form }
+  );
+}

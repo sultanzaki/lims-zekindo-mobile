@@ -1,6 +1,13 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
-import { addTestReading, approveSample, deleteTestReading, rejectSample, submitTestResult } from '@/lib/samples-api';
+import {
+  addTestReading,
+  approveSample,
+  deleteTestReading,
+  rejectSample,
+  submitTestResult,
+  uploadTestAttachment,
+} from '@/lib/samples-api';
 
 export function useAddTestReading(sampleId: string) {
   const queryClient = useQueryClient();
@@ -37,6 +44,15 @@ export function useSubmitTestResult(sampleId: string) {
       queryClient.invalidateQueries({ queryKey: ['sample', sampleId] });
       queryClient.invalidateQueries({ queryKey: ['dashboard'] });
     },
+  });
+}
+
+export function useUploadTestAttachment(sampleId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ testId, asset }: { testId: string; asset: { uri: string; name: string; type: string } }) =>
+      uploadTestAttachment(sampleId, testId, asset),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['sample', sampleId] }),
   });
 }
 
