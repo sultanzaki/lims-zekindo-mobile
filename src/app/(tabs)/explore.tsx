@@ -1,4 +1,4 @@
-import { Platform, ScrollView, StyleSheet } from 'react-native';
+import { Platform, Pressable, ScrollView, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
@@ -6,8 +6,10 @@ import { ThemedView } from '@/components/themed-view';
 import { WebBadge } from '@/components/web-badge';
 import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { useAuth } from '@/lib/auth-context';
 
 export default function AboutScreen() {
+  const { user, logout } = useAuth();
   const safeAreaInsets = useSafeAreaInsets();
   const insets = {
     ...safeAreaInsets,
@@ -37,11 +39,24 @@ export default function AboutScreen() {
         <ThemedView style={styles.titleContainer}>
           <ThemedText type="subtitle">About</ThemedText>
           <ThemedText style={styles.centerText} themeColor="textSecondary">
-            This is an early scaffold for the LIMS Zekindo mobile companion app. It isn&apos;t
-            connected to the LIMS backend yet — the web app currently authenticates via
-            server-side sessions, which needs a token-based API before this app can talk to it.
+            LIMS Zekindo mobile companion app. Auth, dashboard, and sample scan/view are wired up
+            to the web app&apos;s LIMS backend; result entry and approvals are still coming.
           </ThemedText>
         </ThemedView>
+
+        {user && (
+          <ThemedView type="backgroundElement" style={styles.accountCard}>
+            <ThemedText type="smallBold">{user.name}</ThemedText>
+            <ThemedText type="small" themeColor="textSecondary">
+              {user.email} · {user.accessRole}
+            </ThemedText>
+            <Pressable
+              style={({ pressed }) => [styles.signOutButton, pressed && styles.pressed]}
+              onPress={() => logout()}>
+              <ThemedText type="smallBold">Sign out</ThemedText>
+            </Pressable>
+          </ThemedView>
+        )}
 
         {Platform.OS === 'web' && <WebBadge />}
       </ThemedView>
@@ -69,5 +84,18 @@ const styles = StyleSheet.create({
   },
   centerText: {
     textAlign: 'center',
+  },
+  accountCard: {
+    marginHorizontal: Spacing.four,
+    borderRadius: Spacing.three,
+    padding: Spacing.three,
+    gap: Spacing.one,
+  },
+  signOutButton: {
+    marginTop: Spacing.two,
+    alignSelf: 'flex-start',
+  },
+  pressed: {
+    opacity: 0.6,
   },
 });

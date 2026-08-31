@@ -20,6 +20,11 @@ export default function AppTabs() {
         />
       </NativeTabs.Trigger>
 
+      <NativeTabs.Trigger name="scan">
+        <NativeTabs.Trigger.Label>Scan</NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger.Icon sf="qrcode.viewfinder" md="qr_code_scanner" />
+      </NativeTabs.Trigger>
+
       <NativeTabs.Trigger name="explore">
         <NativeTabs.Trigger.Label>About</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon
