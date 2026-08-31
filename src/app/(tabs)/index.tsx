@@ -1,4 +1,4 @@
-import { StyleSheet } from 'react-native';
+import { Platform, Pressable, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { HintRow } from '@/components/hint-row';
@@ -6,9 +6,13 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { WebBadge } from '@/components/web-badge';
 import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
-import { Platform } from 'react-native';
+import { useTheme } from '@/hooks/use-theme';
+import { useAuth } from '@/lib/auth-context';
 
 export default function HomeScreen() {
+  const { user, logout } = useAuth();
+  const theme = useTheme();
+
   return (
     <ThemedView style={styles.container}>
       <SafeAreaView style={styles.safeArea}>
@@ -17,20 +21,30 @@ export default function HomeScreen() {
             LIMS Zekindo
           </ThemedText>
           <ThemedText type="default" themeColor="textSecondary" style={styles.subtitle}>
-            Mobile companion app for the LIMS Zekindo laboratory system.
+            {user ? `Signed in as ${user.name} (${user.accessRole})` : 'Mobile companion app for the LIMS Zekindo laboratory system.'}
           </ThemedText>
         </ThemedView>
 
         <ThemedView type="backgroundElement" style={styles.stepContainer}>
           <HintRow
             title="Status"
-            hint={<ThemedText type="code">scaffold — no backend wired up yet</ThemedText>}
+            hint={<ThemedText type="code">auth wired up — dashboard/scan next</ThemedText>}
           />
           <HintRow
             title="Web app"
             hint={<ThemedText type="code">sultanzaki/lims-zekindo</ThemedText>}
           />
         </ThemedView>
+
+        <Pressable
+          style={({ pressed }) => [
+            styles.signOutButton,
+            { backgroundColor: theme.backgroundElement },
+            pressed && styles.pressed,
+          ]}
+          onPress={() => logout()}>
+          <ThemedText type="smallBold">Sign out</ThemedText>
+        </Pressable>
 
         {Platform.OS === 'web' && <WebBadge />}
       </SafeAreaView>
@@ -71,5 +85,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.three,
     paddingVertical: Spacing.four,
     borderRadius: Spacing.four,
+  },
+  signOutButton: {
+    alignSelf: 'stretch',
+    paddingVertical: Spacing.three,
+    borderRadius: Spacing.three,
+    alignItems: 'center',
+  },
+  pressed: {
+    opacity: 0.7,
   },
 });
