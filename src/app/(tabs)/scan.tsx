@@ -1,6 +1,6 @@
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { router } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Platform, Pressable, StyleSheet, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -8,6 +8,9 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { ApiError } from '@/lib/api-client';
+import { resolveNfcTag } from '@/lib/nfc-api';
+import { cancelNfcRead, isNfcSupported, readNfcTagText } from '@/lib/nfc-reader';
 
 // Mirrors the payload convention the web scanner (ScannerClient.tsx) already
 // uses: a decoded value starting with "/samples/" is a full app path,
@@ -26,7 +29,24 @@ export default function ScanScreen() {
   const [permission, requestPermission] = useCameraPermissions();
   const [scanned, setScanned] = useState(false);
   const [manualId, setManualId] = useState('');
+  const [nfcSupported, setNfcSupported] = useState(false);
+  const [mode, setMode] = useState<'camera' | 'nfc'>('camera');
+  const [nfcStatus, setNfcStatus] = useState<'idle' | 'scanning' | 'resolving'>('idle');
+  const [nfcError, setNfcError] = useState<string | null>(null);
   const theme = useTheme();
+
+  useEffect(() => {
+    let cancelled = false;
+    isNfcSupported().then((supported) => {
+      if (cancelled) return;
+      setNfcSupported(supported);
+      if (supported) setMode('nfc');
+    });
+    return () => {
+      cancelled = true;
+      cancelNfcRead();
+    };
+  }, []);
 
   const goToSample = (id: string) => {
     setManualId('');
@@ -42,6 +62,25 @@ export default function ScanScreen() {
     setTimeout(() => setScanned(false), 1500);
   };
 
+  const handleNfcScan = async () => {
+    setNfcError(null);
+    setNfcStatus('scanning');
+    try {
+      const text = await readNfcTagText();
+      if (!text) {
+        setNfcError('This tag has no readable data.');
+        return;
+      }
+      setNfcStatus('resolving');
+      const result = await resolveNfcTag(text);
+      goToSample(result.sampleId);
+    } catch (e) {
+      setNfcError(e instanceof ApiError ? e.message : 'Could not read the tag. Try again.');
+    } finally {
+      setNfcStatus('idle');
+    }
+  };
+
   const canUseCamera = Platform.OS !== 'web';
 
   return (
@@ -51,7 +90,43 @@ export default function ScanScreen() {
           Scan sample
         </ThemedText>
 
-        {canUseCamera ? (
+        {nfcSupported && (
+          <View style={styles.modeRow}>
+            <Pressable
+              style={[styles.modeButton, { backgroundColor: mode === 'nfc' ? theme.backgroundSelected : theme.backgroundElement }]}
+              onPress={() => setMode('nfc')}>
+              <ThemedText type="smallBold">NFC</ThemedText>
+            </Pressable>
+            <Pressable
+              style={[styles.modeButton, { backgroundColor: mode === 'camera' ? theme.backgroundSelected : theme.backgroundElement }]}
+              onPress={() => setMode('camera')}>
+              <ThemedText type="smallBold">Camera</ThemedText>
+            </Pressable>
+          </View>
+        )}
+
+        {mode === 'nfc' && nfcSupported ? (
+          <ThemedView type="backgroundElement" style={styles.permissionCard}>
+            <ThemedText themeColor="textSecondary" style={styles.centerText}>
+              {nfcStatus === 'scanning'
+                ? 'Hold your phone near the sample tag…'
+                : nfcStatus === 'resolving'
+                  ? 'Looking up sample…'
+                  : 'Tap the button, then hold your phone near the sample tag.'}
+            </ThemedText>
+            {nfcError && (
+              <ThemedText type="small" style={styles.errorText}>
+                {nfcError}
+              </ThemedText>
+            )}
+            <Pressable
+              style={[styles.button, { backgroundColor: theme.backgroundSelected }]}
+              disabled={nfcStatus !== 'idle'}
+              onPress={handleNfcScan}>
+              <ThemedText type="smallBold">Tap to scan</ThemedText>
+            </Pressable>
+          </ThemedView>
+        ) : canUseCamera ? (
           permission?.granted ? (
             <View style={styles.cameraWrap}>
               <CameraView
@@ -122,6 +197,20 @@ const styles = StyleSheet.create({
     gap: Spacing.three,
   },
   title: {
+    textAlign: 'center',
+  },
+  modeRow: {
+    flexDirection: 'row',
+    gap: Spacing.two,
+    alignSelf: 'center',
+  },
+  modeButton: {
+    borderRadius: Spacing.two,
+    paddingHorizontal: Spacing.four,
+    paddingVertical: Spacing.one,
+  },
+  errorText: {
+    color: '#e5484d',
     textAlign: 'center',
   },
   cameraWrap: {

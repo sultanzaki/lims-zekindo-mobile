@@ -5,29 +5,44 @@ Mobile companion app for [lims-zekindo](https://github.com/sultanzaki/lims-zekin
 
 ## Status
 
-This is an early scaffold — it has no LIMS-specific screens or data yet. The web app
-authenticates with cookie-based server sessions (Next.js Server Actions + Prisma), which isn't
-callable from a mobile client. Before real LIMS features (sample lookup, barcode scan, result
-entry, etc.) can be built here, the web app needs a token-based API surface (e.g. JWT-in-header
-routes under `src/app/api/`) for this app to talk to.
+Login, dashboard, sample scan/lookup, test result entry, supervisor/QA approval (with password
+e-signature), notifications, and photo attachment upload are wired up against the
+`/api/mobile/*` routes in the `lims-zekindo` web repo. NFC tag scanning is implemented but needs
+a custom dev client (see below) — it won't work in plain Expo Go. Inventory/equipment/reagent
+management, admin/catalog CRUD, analytics, and the AI assistant stay web-only for now.
 
-## Get started
+## Get started (Expo Go)
+
+Covers everything except NFC scanning.
 
 ```bash
 npm install
+cp .env.example .env   # point EXPO_PUBLIC_API_URL at your lims-zekindo dev server's LAN IP
 npx expo start
 ```
 
-In the output, you'll find options to open the app in a
+Open in [Expo Go](https://expo.dev/go), an Android emulator, or the iOS Simulator (camera scan
+won't work in the Simulator — use the manual sample-ID entry field instead).
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+## NFC scanning (needs a custom dev client)
 
-Screens live in `src/app` (file-based routing via [Expo Router](https://docs.expo.dev/router/introduction)).
+`react-native-nfc-manager` is a native module Expo Go doesn't include, so NFC requires a
+[development build](https://docs.expo.dev/develop/development-builds/introduction/) via
+[EAS Build](https://docs.expo.dev/build/introduction/) — no local Xcode/Android Studio required,
+it builds in Expo's cloud:
+
+```bash
+npx eas login                                    # free account at expo.dev if you don't have one
+npx eas build:configure                          # one-time; writes your project's EAS id into app.json
+npx eas build --profile development --platform android   # or --platform ios (needs an Apple Developer account for a real device)
+```
+
+Install the resulting build on your device, then run `npx expo start --dev-client` instead of
+`npx expo start` to connect to it. Everything else (login, dashboard, scan, entry, approval,
+notifications) still works the same way in the dev client as in Expo Go.
 
 ## Learn more
 
 - [Expo documentation](https://docs.expo.dev/)
 - [Expo Router](https://docs.expo.dev/router/introduction)
+- [EAS Build](https://docs.expo.dev/build/introduction/)

@@ -45,6 +45,14 @@
           "photosPermission": "LIMS Zekindo uses your photos to attach supporting documentation to a test.",
           "cameraPermission": "LIMS Zekindo uses the camera to attach a photo to a test."
         }
+      ],
+      [
+        "react-native-nfc-manager",
+        {
+          "nfcPermission": "LIMS Zekindo uses NFC to scan sample tags.",
+          "selectIdentifiers": [],
+          "systemCodes": []
+        }
       ]
     ],
     "experiments": {
