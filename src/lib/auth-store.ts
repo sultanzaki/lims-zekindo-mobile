@@ -69,15 +69,24 @@ async function refreshSession(refreshToken: string): Promise<boolean> {
 }
 
 // Called on cold start: try to resume a session from the stored refresh
-// token before showing the login screen.
+// token before showing the login screen. This runs fire-and-forget from a
+// useEffect with no caller able to catch a rejection, so any startup error
+// (e.g. EXPO_PUBLIC_API_URL missing from this build, or a network failure)
+// must be handled here — otherwise it would go uncaught on every cold start
+// for any device that already has a stored refresh token.
 export async function bootstrap() {
-  const refreshToken = await SecureStore.getItemAsync(REFRESH_TOKEN_KEY);
-  if (!refreshToken) {
-    setState({ status: 'signedOut' });
-    return;
-  }
-  const resumed = await refreshSession(refreshToken);
-  if (!resumed) {
+  try {
+    const refreshToken = await SecureStore.getItemAsync(REFRESH_TOKEN_KEY);
+    if (!refreshToken) {
+      setState({ status: 'signedOut' });
+      return;
+    }
+    const resumed = await refreshSession(refreshToken);
+    if (!resumed) {
+      setState({ status: 'signedOut', accessToken: null, user: null });
+    }
+  } catch (err) {
+    console.error('[auth] bootstrap failed:', err);
     setState({ status: 'signedOut', accessToken: null, user: null });
   }
 }
