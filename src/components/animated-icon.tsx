@@ -1,62 +1,37 @@
 import { Image } from 'expo-image';
 import * as SplashScreen from 'expo-splash-screen';
-import { useState } from 'react';
-import { StyleSheet, View } from 'react-native';
-import Animated, { Easing, Keyframe } from 'react-native-reanimated';
-import { scheduleOnRN } from 'react-native-worklets';
+import { useRef, useState } from 'react';
+import { Animated, Easing, StyleSheet, View } from 'react-native';
 
-const DURATION = 600;
+const DURATION = 450;
 
 export function AnimatedSplashOverlay() {
-  const [animate, setAnimate] = useState(false);
   const [visible, setVisible] = useState(true);
+  const opacity = useRef(new Animated.Value(1)).current;
 
   if (!visible) return null;
-
-  const splashKeyframe = new Keyframe({
-    0: {
-      transform: [{ scale: 1 }],
-      opacity: 1,
-    },
-    20: {
-      opacity: 1,
-    },
-    70: {
-      opacity: 0,
-      easing: Easing.elastic(0.7),
-    },
-    100: {
-      opacity: 0,
-      transform: [{ scale: 1 }],
-      easing: Easing.elastic(0.7),
-    },
-  });
 
   const image = (
     <Image style={styles.image} source={require('@/assets/images/brand/zekindo-logo-white.png')} contentFit="contain" />
   );
 
-  return animate ? (
+  return (
     <Animated.View
-      entering={splashKeyframe.duration(DURATION).withCallback((finished) => {
-        'worklet';
-        if (finished) {
-          scheduleOnRN(setVisible, false);
-        }
-      })}
-      style={styles.splashOverlay}>
-      {image}
-    </Animated.View>
-  ) : (
-    <View
       onLayout={() => {
         SplashScreen.hideAsync().finally(() => {
-          setAnimate(true);
+          Animated.timing(opacity, {
+            toValue: 0,
+            duration: DURATION,
+            easing: Easing.out(Easing.ease),
+            useNativeDriver: true,
+          }).start(({ finished }) => {
+            if (finished) setVisible(false);
+          });
         });
       }}
-      style={styles.splashOverlay}>
+      style={[styles.splashOverlay, { opacity }]}>
       {image}
-    </View>
+    </Animated.View>
   );
 }
 
