@@ -4,26 +4,49 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
+import { EmptyState } from '@/components/ui/EmptyState';
+import { BottomTabInset, MaxContentWidth, Radius, Spacing } from '@/constants/theme';
 import { useMarkAllNotificationsRead, useNotifications } from '@/hooks/use-notifications';
 import { useTheme } from '@/hooks/use-theme';
+import { relativeTime } from '@/lib/format';
 import type { NotificationRow } from '@/lib/notifications-api';
+import { notifAccent } from '@/lib/notifications';
 
 function NotificationRowItem({ item }: { item: NotificationRow }) {
   const theme = useTheme();
+  const accent = notifAccent(item.title);
+
   const content = (
-    <ThemedView type="backgroundElement" style={styles.rowCard}>
-      {item.unread && <View style={[styles.unreadDot, { backgroundColor: theme.text }]} />}
+    <View
+      style={[
+        styles.rowCard,
+        {
+          backgroundColor: item.unread ? theme.backgroundElement : theme.surfaceAlt,
+          borderColor: item.unread ? theme.primarySoft : theme.borderSoft,
+        },
+      ]}>
+      <View style={[styles.accentIcon, { backgroundColor: accent.bg }]}>
+        <View style={[styles.accentDot, { backgroundColor: accent.color }]} />
+      </View>
       <View style={styles.rowBody}>
-        <ThemedText type="smallBold">{item.title}</ThemedText>
+        <View style={styles.rowTopLine}>
+          <ThemedText type="smallBold" numberOfLines={1} style={styles.rowTitle}>
+            {item.title}
+          </ThemedText>
+          <ThemedText type="small" themeColor="faint">
+            {relativeTime(item.createdAt)}
+          </ThemedText>
+        </View>
         <ThemedText type="small" themeColor="textSecondary">
           {item.body}
         </ThemedText>
-        <ThemedText type="small" themeColor="textSecondary">
-          {new Date(item.createdAt).toLocaleString()}
-        </ThemedText>
+        {item.sampleId && (
+          <ThemedText type="mono" style={{ color: theme.primary, marginTop: 2 }}>
+            {item.sampleId} →
+          </ThemedText>
+        )}
       </View>
-    </ThemedView>
+    </View>
   );
 
   if (!item.sampleId) return content;
@@ -46,22 +69,20 @@ export default function NotificationsScreen() {
   return (
     <ThemedView style={styles.container}>
       <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
+        <View style={[styles.headerRow, { borderBottomColor: theme.borderSoft }]}>
+          <ThemedText type="title">Alerts</ThemedText>
+          {hasUnread && (
+            <Pressable onPress={() => markAllRead.mutate()} disabled={markAllRead.isPending}>
+              <ThemedText type="link" style={{ color: theme.primary }}>
+                {markAllRead.isPending ? 'Marking…' : 'Mark all read'}
+              </ThemedText>
+            </Pressable>
+          )}
+        </View>
+
         <ScrollView
           contentContainerStyle={styles.scrollContent}
           refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor={theme.text} />}>
-          <View style={styles.headerRow}>
-            <ThemedText type="title" style={styles.title}>
-              Notifications
-            </ThemedText>
-            {hasUnread && (
-              <Pressable onPress={() => markAllRead.mutate()} disabled={markAllRead.isPending}>
-                <ThemedText type="small" themeColor="textSecondary">
-                  {markAllRead.isPending ? 'Marking…' : 'Mark all read'}
-                </ThemedText>
-              </Pressable>
-            )}
-          </View>
-
           {isLoading && (
             <ThemedText themeColor="textSecondary" style={styles.centerText}>
               Loading…
@@ -74,11 +95,7 @@ export default function NotificationsScreen() {
             </ThemedText>
           )}
 
-          {!isLoading && notifications.length === 0 && (
-            <ThemedText themeColor="textSecondary" style={styles.centerText}>
-              Nothing here yet.
-            </ThemedText>
-          )}
+          {!isLoading && !isError && notifications.length === 0 && <EmptyState>No notifications yet.</EmptyState>}
 
           {notifications.map((item) => (
             <NotificationRowItem key={item.id} item={item} />
@@ -96,47 +113,63 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
   },
+  headerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: Spacing.three,
+    paddingTop: Spacing.two,
+    paddingBottom: Spacing.three,
+    borderBottomWidth: 1,
+  },
   scrollContent: {
     paddingHorizontal: Spacing.three,
-    paddingTop: Spacing.four,
+    paddingTop: Spacing.three,
     paddingBottom: BottomTabInset + Spacing.four,
     gap: Spacing.two,
     maxWidth: MaxContentWidth,
     alignSelf: 'center',
     width: '100%',
   },
-  headerRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: Spacing.two,
-  },
-  title: {
-    fontSize: 28,
-    lineHeight: 34,
-  },
   centerText: {
     textAlign: 'center',
+    marginTop: Spacing.four,
   },
   errorText: {
-    color: '#e5484d',
+    color: '#D0021B',
     textAlign: 'center',
+    marginTop: Spacing.four,
   },
   rowCard: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: Spacing.two,
-    borderRadius: Spacing.three,
-    padding: Spacing.three,
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    padding: Spacing.three - 2,
+  },
+  accentIcon: {
+    width: 30,
+    height: 30,
+    borderRadius: Radius.sm - 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  accentDot: {
+    width: 9,
+    height: 9,
+    borderRadius: 4.5,
   },
   rowBody: {
     flex: 1,
-    gap: 2,
+    gap: 3,
   },
-  unreadDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    marginTop: 6,
+  rowTopLine: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: Spacing.two,
+  },
+  rowTitle: {
+    flexShrink: 1,
   },
 });

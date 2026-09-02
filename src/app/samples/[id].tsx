@@ -1,11 +1,16 @@
 import * as ImagePicker from 'expo-image-picker';
-import { Stack, useLocalSearchParams } from 'expo-router';
+import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { Linking, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { BackIcon } from '@/components/icons';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { Spacing } from '@/constants/theme';
+import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
+import { StatusBadge } from '@/components/ui/StatusBadge';
+import { CardShadowSm, Fonts, Radius, Spacing, TestStatusStyles } from '@/constants/theme';
 import { useSampleDetail } from '@/hooks/use-sample-detail';
 import {
   useSubmitTestResult,
@@ -18,17 +23,16 @@ import {
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/lib/auth-context';
 import { canApproveAsQa, canReviewAsSupervisor } from '@/lib/roles';
+import { parseSpecVerdict, specNumericLimit } from '@/lib/spec';
 import type { CustodyEvent, SampleAttachment, SampleDetail, SampleTest } from '@/lib/samples-api';
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <View style={styles.section}>
-      <ThemedText type="smallBold" style={styles.sectionTitle}>
-        {title}
-      </ThemedText>
-      {children}
-    </View>
-  );
+const TABS = ['Results', 'Details', 'Custody'] as const;
+type Tab = (typeof TABS)[number];
+
+function parseResultNumber(result: string | null | undefined): number | null {
+  if (!result) return null;
+  const n = parseFloat(String(result).replace(/[^0-9.-]/g, ''));
+  return Number.isNaN(n) ? null : n;
 }
 
 function Chip({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) {
@@ -36,11 +40,10 @@ function Chip({ label, active, onPress }: { label: string; active: boolean; onPr
   return (
     <Pressable
       onPress={onPress}
-      style={[
-        styles.chip,
-        { borderColor: theme.backgroundSelected, backgroundColor: active ? theme.backgroundSelected : 'transparent' },
-      ]}>
-      <ThemedText type="small">{label}</ThemedText>
+      style={[styles.chip, { borderColor: active ? theme.primaryDark : theme.border, backgroundColor: active ? theme.primaryDark : theme.backgroundElement }]}>
+      <ThemedText type="small" style={{ color: active ? '#FFFFFF' : theme.text }}>
+        {label}
+      </ThemedText>
     </Pressable>
   );
 }
@@ -56,9 +59,8 @@ function ReadingsEntry({ sampleId, test }: { sampleId: string; test: SampleTest 
   const deleteReading = useDeleteTestReading(sampleId);
 
   const checkpoints = test.intervalPlan ? test.intervalPlan.split(',') : [];
-  const replicates = test.replicateCount && test.replicateCount > 1
-    ? Array.from({ length: test.replicateCount }, (_, i) => i + 1)
-    : [];
+  const replicates =
+    test.replicateCount && test.replicateCount > 1 ? Array.from({ length: test.replicateCount }, (_, i) => i + 1) : [];
 
   const numericValues = test.readings.map((r) => Number(r.value)).filter((n) => Number.isFinite(n));
   const suggestedAverage =
@@ -82,8 +84,8 @@ function ReadingsEntry({ sampleId, test }: { sampleId: string; test: SampleTest 
   };
 
   return (
-    <View style={styles.readingsBlock}>
-      <ThemedText type="small" themeColor="textSecondary">
+    <View style={[styles.readingsBlock, { borderTopColor: theme.borderSoft }]}>
+      <ThemedText type="small" themeColor="textSecondary" style={styles.uppercaseLabel}>
         Readings {test.readings.length > 0 ? `(${test.readings.length})` : ''}
       </ThemedText>
 
@@ -95,7 +97,7 @@ function ReadingsEntry({ sampleId, test }: { sampleId: string; test: SampleTest 
             {r.intervalLabel ? ` · ${r.intervalLabel}` : ''}
           </ThemedText>
           <Pressable onPress={() => deleteReading.mutate({ testId: test.id, readingId: r.id })}>
-            <ThemedText type="small" style={styles.removeLink}>
+            <ThemedText type="small" style={{ color: theme.danger }}>
               Remove
             </ThemedText>
           </Pressable>
@@ -119,23 +121,25 @@ function ReadingsEntry({ sampleId, test }: { sampleId: string; test: SampleTest 
 
       <View style={styles.entryRow}>
         <TextInput
-          style={[styles.input, styles.flexInput, { color: theme.text, borderColor: theme.backgroundSelected }]}
+          style={[styles.input, styles.flexInput, { color: theme.text, borderColor: theme.border }]}
           placeholder={`Value${test.unit ? ` (${test.unit})` : ''}`}
-          placeholderTextColor={theme.textSecondary}
+          placeholderTextColor={theme.faint}
           value={value}
           onChangeText={setValue}
         />
         <Pressable
-          style={[styles.addButton, { backgroundColor: theme.backgroundSelected, opacity: canAdd ? 1 : 0.5 }]}
+          style={[styles.addButton, { backgroundColor: theme.primarySoft, opacity: canAdd ? 1 : 0.5 }]}
           disabled={!canAdd || addReading.isPending}
           onPress={handleAdd}>
-          <ThemedText type="smallBold">{addReading.isPending ? '…' : 'Add'}</ThemedText>
+          <ThemedText type="link" style={{ color: theme.primaryDark }}>
+            {addReading.isPending ? '…' : 'Add'}
+          </ThemedText>
         </Pressable>
       </View>
       <TextInput
-        style={[styles.input, { color: theme.text, borderColor: theme.backgroundSelected }]}
+        style={[styles.input, { color: theme.text, borderColor: theme.border }]}
         placeholder="Note (optional)"
-        placeholderTextColor={theme.textSecondary}
+        placeholderTextColor={theme.faint}
         value={note}
         onChangeText={setNote}
       />
@@ -156,25 +160,17 @@ async function pickAndUploadAttachment(
   upload: ReturnType<typeof useUploadTestAttachment>
 ) {
   const permission =
-    source === 'camera'
-      ? await ImagePicker.requestCameraPermissionsAsync()
-      : await ImagePicker.requestMediaLibraryPermissionsAsync();
+    source === 'camera' ? await ImagePicker.requestCameraPermissionsAsync() : await ImagePicker.requestMediaLibraryPermissionsAsync();
   if (!permission.granted) return;
 
   const result =
-    source === 'camera'
-      ? await ImagePicker.launchCameraAsync({ quality: 0.7 })
-      : await ImagePicker.launchImageLibraryAsync({ quality: 0.7 });
+    source === 'camera' ? await ImagePicker.launchCameraAsync({ quality: 0.7 }) : await ImagePicker.launchImageLibraryAsync({ quality: 0.7 });
   if (result.canceled || !result.assets?.[0]) return;
 
   const asset = result.assets[0];
   upload.mutate({
     testId,
-    asset: {
-      uri: asset.uri,
-      name: asset.fileName || `photo-${Date.now()}.jpg`,
-      type: asset.mimeType || 'image/jpeg',
-    },
+    asset: { uri: asset.uri, name: asset.fileName || `photo-${Date.now()}.jpg`, type: asset.mimeType || 'image/jpeg' },
   });
 }
 
@@ -184,65 +180,157 @@ function PendingTestCard({ sampleId, test }: { sampleId: string; test: SampleTes
   const [notes, setNotes] = useState('');
   const submitResult = useSubmitTestResult(sampleId);
   const uploadAttachment = useUploadTestAttachment(sampleId);
+  const st = TestStatusStyles.pending;
 
   return (
-    <ThemedView type="backgroundElement" style={styles.testCard}>
-      <ThemedText type="smallBold">{test.name}</ThemedText>
-      <ThemedText type="small" themeColor="textSecondary">
-        {test.spec} {test.unit ? `(${test.unit})` : ''}
-      </ThemedText>
+    <Card style={styles.testCard}>
+      <View style={styles.testHeaderRow}>
+        <View style={styles.rowBody}>
+          <ThemedText type="subtitle" style={styles.testName}>
+            {test.name}
+          </ThemedText>
+        </View>
+        <StatusBadge status="pending" short={st.label} />
+      </View>
 
       {test.resultMode === 'MULTI' && <ReadingsEntry sampleId={sampleId} test={test} />}
 
-      <View style={styles.reviewButtonRow}>
+      <View style={[styles.attachmentRowButtons, { borderTopColor: theme.borderSoft }]}>
         <Pressable
-          style={[styles.reviewButton, { backgroundColor: theme.background }]}
+          style={[styles.ghostButton, { backgroundColor: theme.chipBg }]}
           disabled={uploadAttachment.isPending}
           onPress={() => pickAndUploadAttachment('camera', test.id, uploadAttachment)}>
           <ThemedText type="small">{uploadAttachment.isPending ? 'Uploading…' : 'Take photo'}</ThemedText>
         </Pressable>
         <Pressable
-          style={[styles.reviewButton, { backgroundColor: theme.background }]}
+          style={[styles.ghostButton, { backgroundColor: theme.chipBg }]}
           disabled={uploadAttachment.isPending}
           onPress={() => pickAndUploadAttachment('library', test.id, uploadAttachment)}>
           <ThemedText type="small">Choose photo</ThemedText>
         </Pressable>
       </View>
       {uploadAttachment.isError && (
-        <ThemedText type="small" style={styles.errorText}>
+        <ThemedText type="small" style={{ color: theme.danger }}>
           {uploadAttachment.error instanceof Error ? uploadAttachment.error.message : 'Upload failed.'}
         </ThemedText>
       )}
 
-      <ThemedText type="small" themeColor="textSecondary" style={styles.resultLabel}>
-        Final result
-      </ThemedText>
-      <TextInput
-        style={[styles.input, { color: theme.text, borderColor: theme.backgroundSelected }]}
-        placeholder={`Result${test.unit ? ` (${test.unit})` : ''}`}
-        placeholderTextColor={theme.textSecondary}
-        value={result}
-        onChangeText={setResult}
-      />
-      <TextInput
-        style={[styles.input, { color: theme.text, borderColor: theme.backgroundSelected }]}
-        placeholder="Notes (optional)"
-        placeholderTextColor={theme.textSecondary}
-        value={notes}
-        onChangeText={setNotes}
-      />
-      {submitResult.isError && (
-        <ThemedText type="small" style={styles.errorText}>
-          {submitResult.error instanceof Error ? submitResult.error.message : 'Could not submit result.'}
+      <View style={styles.resultEntry}>
+        <ThemedText type="small" themeColor="textSecondary" style={styles.uppercaseLabel}>
+          Final result
         </ThemedText>
+        <TextInput
+          style={[styles.input, { color: theme.text, borderColor: theme.border }]}
+          placeholder={`Result${test.unit ? ` (${test.unit})` : ''}`}
+          placeholderTextColor={theme.faint}
+          value={result}
+          onChangeText={setResult}
+        />
+        <TextInput
+          style={[styles.input, { color: theme.text, borderColor: theme.border }]}
+          placeholder="Notes (optional)"
+          placeholderTextColor={theme.faint}
+          value={notes}
+          onChangeText={setNotes}
+        />
+        {submitResult.isError && (
+          <ThemedText type="small" style={{ color: theme.danger }}>
+            {submitResult.error instanceof Error ? submitResult.error.message : 'Could not submit result.'}
+          </ThemedText>
+        )}
+        <Button
+          label={submitResult.isPending ? 'Submitting…' : 'Submit for review'}
+          disabled={!result.trim() || submitResult.isPending}
+          onPress={() => submitResult.mutate({ testId: test.id, result: result.trim(), notes: notes.trim() })}
+        />
+      </View>
+    </Card>
+  );
+}
+
+function ResultTestCard({ test }: { test: SampleTest }) {
+  const theme = useTheme();
+  const st = TestStatusStyles[test.status] ?? TestStatusStyles.pending;
+  const verdict = parseSpecVerdict(test.spec, test.result);
+  const verdictBg = verdict === 'Pass' ? theme.successBg : verdict === 'Fail' ? theme.dangerBg : theme.chipBg;
+  const verdictColor = verdict === 'Pass' ? theme.successDark : verdict === 'Fail' ? theme.dangerDark : theme.textSecondary;
+  const verdictNote = verdict === 'Pass' ? 'Within limit' : verdict === 'Fail' ? 'Exceeds limit' : 'Manual review';
+  const limit = specNumericLimit(test.spec);
+  const resultN = parseResultNumber(test.result);
+  const showBar = limit != null && limit > 0 && resultN != null && /^[≤<]/.test(test.spec.trim());
+  const barPct = showBar ? Math.min(100, Math.max(0, (resultN! / limit!) * 100)) : 0;
+
+  return (
+    <Card padded={false} style={styles.resultCard}>
+      <View style={styles.testHeaderRow}>
+        <View style={styles.rowBody}>
+          <ThemedText type="subtitle" style={styles.testName}>
+            {test.name}
+          </ThemedText>
+          {test.notes ? (
+            <ThemedText type="small" themeColor="textSecondary">
+              {test.notes}
+            </ThemedText>
+          ) : null}
+        </View>
+        <StatusBadge status={test.status} short={st.label} />
+      </View>
+
+      <View style={[styles.verdictRow, { borderTopColor: theme.borderSoft }]}>
+        <View style={[styles.verdictCol, { borderRightColor: theme.borderSoft }]}>
+          <ThemedText type="small" themeColor="faint" style={styles.uppercaseLabel}>
+            Result
+          </ThemedText>
+          <ThemedText type="mono" style={styles.verdictResultText}>
+            {test.result}
+          </ThemedText>
+          <ThemedText type="small" themeColor="textSecondary">
+            {test.unit}
+          </ThemedText>
+        </View>
+        <View style={[styles.verdictCol, { borderRightColor: theme.borderSoft }]}>
+          <ThemedText type="small" themeColor="faint" style={styles.uppercaseLabel}>
+            Spec
+          </ThemedText>
+          <ThemedText type="mono">{test.spec}</ThemedText>
+        </View>
+        <View style={[styles.verdictBadge, { backgroundColor: verdictBg }]}>
+          <ThemedText type="smallBold" style={{ color: verdictColor }}>
+            {verdict ?? '—'}
+          </ThemedText>
+          <ThemedText type="small" style={{ color: verdictColor }}>
+            {verdictNote}
+          </ThemedText>
+        </View>
+      </View>
+
+      {showBar && (
+        <View style={[styles.barWrap, { borderTopColor: theme.borderSoft }]}>
+          <View style={[styles.barTrack, { backgroundColor: theme.chipBg }]}>
+            <View style={[styles.barFill, { width: `${barPct}%`, backgroundColor: verdictColor }]} />
+          </View>
+          <View style={styles.barLabels}>
+            <ThemedText type="small" themeColor="faint">
+              0
+            </ThemedText>
+            <ThemedText type="small" themeColor="faint">
+              limit {test.spec}
+            </ThemedText>
+          </View>
+        </View>
       )}
-      <Pressable
-        style={[styles.submitButton, { backgroundColor: theme.backgroundSelected, opacity: result.trim() ? 1 : 0.5 }]}
-        disabled={!result.trim() || submitResult.isPending}
-        onPress={() => submitResult.mutate({ testId: test.id, result: result.trim(), notes: notes.trim() })}>
-        <ThemedText type="smallBold">{submitResult.isPending ? 'Submitting…' : 'Submit for review'}</ThemedText>
-      </Pressable>
-    </ThemedView>
+
+      {test.attachments.length > 0 && (
+        <View style={[styles.attachmentsBlock, { borderTopColor: theme.borderSoft }]}>
+          <ThemedText type="small" themeColor="faint" style={styles.uppercaseLabel}>
+            Attachments ({test.attachments.length})
+          </ThemedText>
+          {test.attachments.map((a) => (
+            <AttachmentRow key={a.id} attachment={a} />
+          ))}
+        </View>
+      )}
+    </Card>
   );
 }
 
@@ -253,11 +341,11 @@ function ApprovalSection({ sample, userRole }: { sample: SampleDetail; userRole:
   const approveMutation = useApproveSample(sample.id);
   const rejectMutation = useRejectSample(sample.id);
 
+  const stage = sample.status === 'Awaiting Supervisor Review' ? 'supervisor' : sample.status === 'Awaiting QA Approval' ? 'qa' : null;
   const canAct =
-    (sample.status === 'Awaiting Supervisor Review' && canReviewAsSupervisor(userRole)) ||
-    (sample.status === 'Awaiting QA Approval' && canApproveAsQa(userRole));
+    (stage === 'supervisor' && canReviewAsSupervisor(userRole)) || (stage === 'qa' && canApproveAsQa(userRole));
 
-  if (!canAct) return null;
+  if (!stage) return null;
 
   const mutation = action === 'reject' ? rejectMutation : approveMutation;
 
@@ -272,77 +360,98 @@ function ApprovalSection({ sample, userRole }: { sample: SampleDetail; userRole:
   };
 
   return (
-    <Section title="Review">
-      {action === null ? (
-        <View style={styles.reviewButtonRow}>
-          <Pressable
-            style={[styles.reviewButton, { backgroundColor: theme.backgroundSelected }]}
-            onPress={() => setAction('approve')}>
-            <ThemedText type="smallBold">Approve</ThemedText>
-          </Pressable>
-          <Pressable
-            style={[styles.reviewButton, { backgroundColor: theme.backgroundElement }]}
-            onPress={() => setAction('reject')}>
-            <ThemedText type="smallBold" style={styles.errorText}>
-              Reject
-            </ThemedText>
-          </Pressable>
-        </View>
-      ) : (
-        <ThemedView type="backgroundElement" style={styles.reviewConfirmCard}>
-          <ThemedText type="small" themeColor="textSecondary">
-            Enter your password to {action} this sample.
-          </ThemedText>
-          <TextInput
-            style={[styles.input, { color: theme.text, borderColor: theme.backgroundSelected }]}
-            placeholder="Password"
-            placeholderTextColor={theme.textSecondary}
-            secureTextEntry
-            value={password}
-            onChangeText={setPassword}
-          />
-          {mutation.isError && (
-            <ThemedText type="small" style={styles.errorText}>
-              {mutation.error instanceof Error ? mutation.error.message : 'Action failed.'}
-            </ThemedText>
-          )}
+    <View style={[styles.approvalCard, { backgroundColor: theme.warningBg, borderColor: 'rgba(245,166,35,0.3)' }]}>
+      <ThemedText type="smallBold" style={{ color: theme.warningDark }}>
+        {stage === 'supervisor' ? 'Awaiting supervisor review' : 'Awaiting QA approval'}
+      </ThemedText>
+      <ThemedText type="small" style={{ color: theme.warningDark }}>
+        {canAct ? 'Sign your decision to move this sample forward.' : 'Waiting on a reviewer with permission to act.'}
+      </ThemedText>
+
+      {canAct &&
+        (action === null ? (
           <View style={styles.reviewButtonRow}>
-            <Pressable
-              style={[styles.reviewButton, { backgroundColor: theme.backgroundSelected, opacity: password ? 1 : 0.5 }]}
-              disabled={!password || mutation.isPending}
-              onPress={handleConfirm}>
-              <ThemedText type="smallBold">{mutation.isPending ? 'Submitting…' : `Confirm ${action}`}</ThemedText>
+            <Pressable style={[styles.reviewOutlineButton, { borderColor: theme.danger }]} onPress={() => setAction('reject')}>
+              <ThemedText type="link" style={{ color: theme.danger }}>
+                Reject
+              </ThemedText>
             </Pressable>
-            <Pressable style={styles.reviewButton} onPress={reset}>
-              <ThemedText type="smallBold">Cancel</ThemedText>
+            <Pressable style={[styles.reviewSolidButton, { backgroundColor: theme.success }]} onPress={() => setAction('approve')}>
+              <ThemedText type="link" style={{ color: '#FFFFFF' }}>
+                Approve
+              </ThemedText>
             </Pressable>
           </View>
-        </ThemedView>
-      )}
-    </Section>
+        ) : (
+          <View style={styles.reviewConfirmBlock}>
+            <TextInput
+              style={[styles.input, { color: theme.text, borderColor: 'rgba(245,166,35,0.4)', backgroundColor: theme.backgroundElement }]}
+              placeholder="Enter your password to sign this decision"
+              placeholderTextColor={theme.faint}
+              secureTextEntry
+              value={password}
+              onChangeText={setPassword}
+            />
+            {mutation.isError && (
+              <ThemedText type="small" style={{ color: theme.danger }}>
+                {mutation.error instanceof Error ? mutation.error.message : 'Action failed.'}
+              </ThemedText>
+            )}
+            <View style={styles.reviewButtonRow}>
+              <Pressable style={[styles.reviewOutlineButton, { borderColor: theme.border, backgroundColor: theme.backgroundElement }]} onPress={reset}>
+                <ThemedText type="link">Cancel</ThemedText>
+              </Pressable>
+              <Pressable
+                style={[
+                  styles.reviewSolidButton,
+                  { backgroundColor: action === 'approve' ? theme.success : theme.danger, opacity: password ? 1 : 0.5 },
+                ]}
+                disabled={!password || mutation.isPending}
+                onPress={handleConfirm}>
+                <ThemedText type="link" style={{ color: '#FFFFFF' }}>
+                  {mutation.isPending ? 'Signing…' : `Confirm ${action}`}
+                </ThemedText>
+              </Pressable>
+            </View>
+          </View>
+        ))}
+    </View>
   );
 }
 
-function TestRow({ test }: { test: SampleTest }) {
+function InfoRow({ label, value, last }: { label: string; value: string; last?: boolean }) {
+  const theme = useTheme();
   return (
-    <ThemedView type="backgroundElement" style={styles.rowCard}>
-      <View style={styles.rowBody}>
-        <ThemedText type="smallBold">{test.name}</ThemedText>
-        <ThemedText type="small" themeColor="textSecondary">
-          {test.status} {test.result ? `· ${test.result} ${test.unit}` : ''}
-        </ThemedText>
-      </View>
-    </ThemedView>
+    <View style={[styles.infoRow, !last && { borderBottomWidth: 1, borderBottomColor: theme.borderSoft }]}>
+      <ThemedText type="small" themeColor="textSecondary">
+        {label}
+      </ThemedText>
+      <ThemedText type="small" style={styles.infoValue} numberOfLines={1}>
+        {value}
+      </ThemedText>
+    </View>
   );
 }
 
-function CustodyRow({ event }: { event: CustodyEvent }) {
+function CustodyRow({ event, isLast }: { event: CustodyEvent; isLast: boolean }) {
+  const theme = useTheme();
   return (
     <View style={styles.custodyRow}>
-      <ThemedText type="small">{event.label}</ThemedText>
-      <ThemedText type="small" themeColor="textSecondary">
-        {new Date(event.time).toLocaleString()}
-      </ThemedText>
+      <View style={styles.custodyLine}>
+        <View style={[styles.custodyDot, { backgroundColor: theme.primary }]} />
+        {!isLast && <View style={[styles.custodyConnector, { backgroundColor: theme.borderSoft }]} />}
+      </View>
+      <View style={[styles.custodyBody, !isLast && { paddingBottom: Spacing.three }]}>
+        <ThemedText type="small">{event.label}</ThemedText>
+        {event.detail ? (
+          <ThemedText type="small" themeColor="textSecondary">
+            {event.detail}
+          </ThemedText>
+        ) : null}
+        <ThemedText type="small" themeColor="faint">
+          {new Date(event.time).toLocaleString()}
+        </ThemedText>
+      </View>
     </View>
   );
 }
@@ -351,17 +460,19 @@ function AttachmentRow({ attachment }: { attachment: SampleAttachment }) {
   const theme = useTheme();
   return (
     <Pressable
-      style={[styles.rowCard, { backgroundColor: theme.backgroundElement }]}
+      style={[styles.attachmentRow, { backgroundColor: theme.chipBg }]}
       disabled={!attachment.url}
       onPress={() => attachment.url && Linking.openURL(attachment.url)}>
       <View style={styles.rowBody}>
-        <ThemedText type="smallBold">{attachment.fileName}</ThemedText>
-        <ThemedText type="small" themeColor="textSecondary">
+        <ThemedText type="small" numberOfLines={1}>
+          {attachment.fileName}
+        </ThemedText>
+        <ThemedText type="small" themeColor="faint">
           {attachment.uploadedBy} · {new Date(attachment.uploadedAt).toLocaleDateString()}
         </ThemedText>
       </View>
       {attachment.url && (
-        <ThemedText type="link" themeColor="text">
+        <ThemedText type="link" style={{ color: theme.primary }}>
           View
         </ThemedText>
       )}
@@ -372,49 +483,85 @@ function AttachmentRow({ attachment }: { attachment: SampleAttachment }) {
 export default function SampleDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { user } = useAuth();
+  const theme = useTheme();
+  const [tab, setTab] = useState<Tab>('Results');
   const { data, isLoading, isError, error } = useSampleDetail(id);
   const sample = data?.sample;
 
-  const allAttachments = sample
-    ? [...sample.tests.flatMap((t) => t.attachments), ...sample.reports]
-    : [];
-
   return (
     <>
-      <Stack.Screen options={{ headerShown: true, title: id }} />
+      <Stack.Screen options={{ headerShown: false }} />
       <ThemedView style={styles.container}>
-        <ScrollView contentContainerStyle={styles.scrollContent}>
-          {isLoading && (
-            <ThemedText themeColor="textSecondary" style={styles.centerText}>
-              Loading sample…
-            </ThemedText>
-          )}
-
-          {isError && (
-            <ThemedText type="small" style={styles.errorText}>
-              {error instanceof Error ? error.message : 'Could not load this sample.'}
-            </ThemedText>
-          )}
-
-          {sample && (
-            <>
-              <View style={styles.header}>
-                <ThemedText type="title" style={styles.title}>
-                  {sample.name || sample.id}
+        <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
+          <View style={[styles.headerBar, { borderBottomColor: theme.borderSoft }]}>
+            <View style={styles.headerTopRow}>
+              <Pressable
+                onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))}
+                style={[styles.backButton, { backgroundColor: theme.background }]}
+                hitSlop={8}
+                accessibilityLabel="Back">
+                <BackIcon size={18} color={theme.primaryDark} />
+              </Pressable>
+              <View style={styles.rowBody}>
+                <ThemedText type="mono" numberOfLines={1}>
+                  {id}
                 </ThemedText>
-                <ThemedText themeColor="textSecondary">
-                  {sample.id} · {sample.type} · {sample.priority}
+                <ThemedText type="small" themeColor="textSecondary" numberOfLines={1}>
+                  {sample?.name || sample?.type || ''}
                 </ThemedText>
-                <ThemedView type="backgroundElement" style={styles.statusBadge}>
-                  <ThemedText type="smallBold">{sample.status}</ThemedText>
-                </ThemedView>
               </View>
+              {sample && <StatusBadge status={sample.status} />}
+            </View>
 
-              {user && <ApprovalSection sample={sample} userRole={user.accessRole} />}
+            {sample && (
+              <View style={[styles.tabSegment, { backgroundColor: theme.chipBg }]}>
+                {TABS.map((t) => {
+                  const active = tab === t;
+                  return (
+                    <Pressable
+                      key={t}
+                      onPress={() => setTab(t)}
+                      style={[styles.tabButton, active && [CardShadowSm, { backgroundColor: theme.backgroundElement }]]}>
+                      <ThemedText type="link" style={{ color: active ? theme.primaryDark : theme.faint }}>
+                        {t}
+                      </ThemedText>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            )}
+          </View>
 
-              <Section title="Tests">
+          <ScrollView contentContainerStyle={styles.scrollContent}>
+            {isLoading && (
+              <ThemedText themeColor="textSecondary" style={styles.centerText}>
+                Loading sample…
+              </ThemedText>
+            )}
+
+            {isError && (
+              <ThemedText type="small" style={styles.errorText}>
+                {error instanceof Error ? error.message : 'Could not load this sample.'}
+              </ThemedText>
+            )}
+
+            {sample && tab === 'Results' && (
+              <>
+                {user && <ApprovalSection sample={sample} userRole={user.accessRole} />}
+
+                {sample.reports.length > 0 && (
+                  <View style={styles.section}>
+                    <ThemedText type="subtitle" style={styles.sectionTitle}>
+                      Reports
+                    </ThemedText>
+                    {sample.reports.map((r) => (
+                      <AttachmentRow key={r.id} attachment={r} />
+                    ))}
+                  </View>
+                )}
+
                 {sample.tests.length === 0 ? (
-                  <ThemedText type="small" themeColor="textSecondary">
+                  <ThemedText type="small" themeColor="textSecondary" style={styles.centerText}>
                     No tests on this sample.
                   </ThemedText>
                 ) : (
@@ -422,32 +569,43 @@ export default function SampleDetailScreen() {
                     test.status === 'pending' ? (
                       <PendingTestCard key={test.id} sampleId={sample.id} test={test} />
                     ) : (
-                      <TestRow key={test.id} test={test} />
+                      <ResultTestCard key={test.id} test={test} />
                     )
                   )
                 )}
-              </Section>
+              </>
+            )}
 
-              {allAttachments.length > 0 && (
-                <Section title="Attachments & reports">
-                  {allAttachments.map((a) => (
-                    <AttachmentRow key={a.id} attachment={a} />
-                  ))}
-                </Section>
-              )}
+            {sample && tab === 'Details' && (
+              <Card padded={false}>
+                <InfoRow label="Sample ID" value={sample.id} />
+                <InfoRow label="Type" value={sample.type} />
+                <InfoRow label="Source" value={sample.source} />
+                <InfoRow label="Priority" value={sample.priority} />
+                <InfoRow label="Collected by" value={sample.collectedBy} />
+                <InfoRow label="Collected" value={new Date(sample.collectedDate).toLocaleString()} />
+                <InfoRow label="Received" value={new Date(sample.receivedDate).toLocaleString()} />
+                <InfoRow label="Container" value={sample.container} />
+                {sample.businessUnit && <InfoRow label="Business unit" value={sample.businessUnit.name} />}
+                <InfoRow label="Storage location" value={sample.storageLocation || '—'} last />
+              </Card>
+            )}
 
-              <Section title="Custody trail">
+            {sample && tab === 'Custody' && (
+              <Card>
                 {sample.custodyEvents.length === 0 ? (
                   <ThemedText type="small" themeColor="textSecondary">
                     No custody events yet.
                   </ThemedText>
                 ) : (
-                  sample.custodyEvents.map((event) => <CustodyRow key={event.id} event={event} />)
+                  sample.custodyEvents.map((event, i) => (
+                    <CustodyRow key={event.id} event={event} isLast={i === sample.custodyEvents.length - 1} />
+                  ))
                 )}
-              </Section>
-            </>
-          )}
-        </ScrollView>
+              </Card>
+            )}
+          </ScrollView>
+        </SafeAreaView>
       </ThemedView>
     </>
   );
@@ -457,30 +615,53 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
+  safeArea: {
+    flex: 1,
+  },
+  headerBar: {
+    borderBottomWidth: 1,
+  },
+  headerTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two,
+    paddingHorizontal: Spacing.three,
+    paddingTop: Spacing.two,
+    paddingBottom: Spacing.two,
+  },
+  backButton: {
+    width: 36,
+    height: 36,
+    borderRadius: Radius.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tabSegment: {
+    flexDirection: 'row',
+    gap: 3,
+    marginHorizontal: Spacing.three,
+    marginBottom: Spacing.three,
+    padding: 3,
+    borderRadius: Radius.md,
+  },
+  tabButton: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: Spacing.two,
+    borderRadius: Radius.sm,
+  },
   scrollContent: {
     padding: Spacing.three,
-    gap: Spacing.four,
+    gap: Spacing.three,
   },
   centerText: {
     textAlign: 'center',
+    marginTop: Spacing.four,
   },
   errorText: {
-    color: '#e5484d',
+    color: '#D0021B',
     textAlign: 'center',
-  },
-  header: {
-    gap: Spacing.one,
-  },
-  title: {
-    fontSize: 24,
-    lineHeight: 30,
-  },
-  statusBadge: {
-    alignSelf: 'flex-start',
-    borderRadius: Spacing.two,
-    paddingHorizontal: Spacing.two,
-    paddingVertical: Spacing.half,
-    marginTop: Spacing.one,
+    marginTop: Spacing.four,
   },
   section: {
     gap: Spacing.two,
@@ -488,57 +669,113 @@ const styles = StyleSheet.create({
   sectionTitle: {
     marginBottom: Spacing.one,
   },
-  rowCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.two,
-    borderRadius: Spacing.three,
-    padding: Spacing.three,
-  },
   rowBody: {
     flex: 1,
     gap: 2,
   },
-  custodyRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingVertical: Spacing.one,
+  uppercaseLabel: {
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+    fontSize: 10.5,
   },
   testCard: {
-    borderRadius: Spacing.three,
-    padding: Spacing.three,
     gap: Spacing.two,
   },
-  resultLabel: {
-    marginTop: Spacing.one,
+  testHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: Spacing.two,
+  },
+  testName: {
+    fontSize: 15,
+  },
+  resultCard: {
+    overflow: 'hidden',
+  },
+  verdictRow: {
+    flexDirection: 'row',
+    borderTopWidth: 1,
+  },
+  verdictCol: {
+    flex: 1,
+    padding: Spacing.three - 1,
+    borderRightWidth: 1,
+    gap: 4,
+  },
+  verdictResultText: {
+    fontSize: 17,
+  },
+  verdictBadge: {
+    width: 92,
+    padding: Spacing.two,
+    justifyContent: 'center',
+    gap: 2,
+  },
+  barWrap: {
+    borderTopWidth: 1,
+    padding: Spacing.three - 1,
+    gap: Spacing.one,
+  },
+  barTrack: {
+    height: 8,
+    borderRadius: Radius.full,
+    overflow: 'hidden',
+  },
+  barFill: {
+    height: '100%',
+    borderRadius: Radius.full,
+  },
+  barLabels: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  attachmentsBlock: {
+    borderTopWidth: 1,
+    padding: Spacing.three - 1,
+    gap: Spacing.one,
+  },
+  attachmentRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two,
+    borderRadius: Radius.sm,
+    padding: Spacing.two,
+  },
+  attachmentRowButtons: {
+    flexDirection: 'row',
+    gap: Spacing.two,
+    borderTopWidth: 1,
+    paddingTop: Spacing.two,
+  },
+  ghostButton: {
+    flex: 1,
+    borderRadius: Radius.sm,
+    paddingVertical: Spacing.two,
+    alignItems: 'center',
+  },
+  resultEntry: {
+    gap: Spacing.two,
   },
   input: {
     borderWidth: 1,
-    borderRadius: Spacing.two,
+    borderRadius: Radius.sm,
     paddingHorizontal: Spacing.three,
     paddingVertical: Spacing.two,
     fontSize: 15,
+    fontFamily: Fonts.regular,
   },
   flexInput: {
     flex: 1,
   },
-  submitButton: {
-    borderRadius: Spacing.two,
-    paddingVertical: Spacing.two,
-    alignItems: 'center',
-    marginTop: Spacing.one,
-  },
   readingsBlock: {
     gap: Spacing.one,
-    paddingVertical: Spacing.two,
+    paddingTop: Spacing.two,
+    borderTopWidth: 1,
   },
   readingRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-  },
-  removeLink: {
-    color: '#e5484d',
   },
   chipRow: {
     flexDirection: 'row',
@@ -547,7 +784,7 @@ const styles = StyleSheet.create({
   },
   chip: {
     borderWidth: 1,
-    borderRadius: Spacing.four,
+    borderRadius: Radius.full,
     paddingHorizontal: Spacing.two,
     paddingVertical: Spacing.half,
   },
@@ -557,23 +794,69 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   addButton: {
-    borderRadius: Spacing.two,
+    borderRadius: Radius.sm,
     paddingHorizontal: Spacing.three,
     paddingVertical: Spacing.two,
+  },
+  approvalCard: {
+    borderWidth: 1,
+    borderRadius: Radius.lg,
+    padding: Spacing.three,
+    gap: Spacing.two,
   },
   reviewButtonRow: {
     flexDirection: 'row',
     gap: Spacing.two,
   },
-  reviewButton: {
+  reviewOutlineButton: {
     flex: 1,
-    borderRadius: Spacing.two,
-    paddingVertical: Spacing.two,
+    borderWidth: 1,
+    borderRadius: Radius.full,
+    paddingVertical: Spacing.two + 2,
     alignItems: 'center',
   },
-  reviewConfirmCard: {
-    borderRadius: Spacing.three,
-    padding: Spacing.three,
+  reviewSolidButton: {
+    flex: 1,
+    borderRadius: Radius.full,
+    paddingVertical: Spacing.two + 2,
+    alignItems: 'center',
+  },
+  reviewConfirmBlock: {
     gap: Spacing.two,
+  },
+  infoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: Spacing.two,
+    paddingHorizontal: Spacing.three,
+    paddingVertical: Spacing.three - 3,
+  },
+  infoValue: {
+    flexShrink: 1,
+    textAlign: 'right',
+  },
+  custodyRow: {
+    flexDirection: 'row',
+    gap: Spacing.two,
+  },
+  custodyLine: {
+    alignItems: 'center',
+    width: 10,
+  },
+  custodyDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginTop: 4,
+  },
+  custodyConnector: {
+    flex: 1,
+    width: 2,
+    marginTop: 2,
+  },
+  custodyBody: {
+    flex: 1,
+    gap: 1,
   },
 });

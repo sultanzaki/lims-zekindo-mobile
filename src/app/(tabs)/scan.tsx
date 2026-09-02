@@ -6,7 +6,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { Spacing } from '@/constants/theme';
+import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
+import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { ApiError } from '@/lib/api-client';
 import { resolveNfcTag } from '@/lib/nfc-api';
@@ -85,103 +87,102 @@ export default function ScanScreen() {
 
   return (
     <ThemedView style={styles.container}>
-      <SafeAreaView style={styles.safeArea}>
-        <ThemedText type="subtitle" style={styles.title}>
-          Scan sample
-        </ThemedText>
+      <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
+        <View style={[styles.headerBar, { borderBottomColor: theme.borderSoft }]}>
+          <ThemedText type="title">Scan</ThemedText>
+        </View>
 
-        {nfcSupported && (
-          <View style={styles.modeRow}>
-            <Pressable
-              style={[styles.modeButton, { backgroundColor: mode === 'nfc' ? theme.backgroundSelected : theme.backgroundElement }]}
-              onPress={() => setMode('nfc')}>
-              <ThemedText type="smallBold">NFC</ThemedText>
-            </Pressable>
-            <Pressable
-              style={[styles.modeButton, { backgroundColor: mode === 'camera' ? theme.backgroundSelected : theme.backgroundElement }]}
-              onPress={() => setMode('camera')}>
-              <ThemedText type="smallBold">Camera</ThemedText>
-            </Pressable>
-          </View>
-        )}
-
-        {mode === 'nfc' && nfcSupported ? (
-          <ThemedView type="backgroundElement" style={styles.permissionCard}>
-            <ThemedText themeColor="textSecondary" style={styles.centerText}>
-              {nfcStatus === 'scanning'
-                ? 'Hold your phone near the sample tag…'
-                : nfcStatus === 'resolving'
-                  ? 'Looking up sample…'
-                  : 'Tap the button, then hold your phone near the sample tag.'}
-            </ThemedText>
-            {nfcError && (
-              <ThemedText type="small" style={styles.errorText}>
-                {nfcError}
-              </ThemedText>
-            )}
-            <Pressable
-              style={[styles.button, { backgroundColor: theme.backgroundSelected }]}
-              disabled={nfcStatus !== 'idle'}
-              onPress={handleNfcScan}>
-              <ThemedText type="smallBold">Tap to scan</ThemedText>
-            </Pressable>
-          </ThemedView>
-        ) : canUseCamera ? (
-          permission?.granted ? (
-            <View style={styles.cameraWrap}>
-              <CameraView
-                style={styles.camera}
-                facing="back"
-                barcodeScannerSettings={{ barcodeTypes: ['qr', 'code128', 'code39', 'ean13'] }}
-                onBarcodeScanned={handleBarcodeScanned}
-              />
+        <View style={styles.body}>
+          {nfcSupported && (
+            <View style={[styles.modeRow, { backgroundColor: theme.chipBg }]}>
+              <Pressable
+                style={[styles.modeButton, mode === 'nfc' && [styles.modeButtonActive, { backgroundColor: theme.backgroundElement }]]}
+                onPress={() => setMode('nfc')}>
+                <ThemedText type="link" style={{ color: mode === 'nfc' ? theme.primaryDark : theme.faint }}>
+                  NFC
+                </ThemedText>
+              </Pressable>
+              <Pressable
+                style={[styles.modeButton, mode === 'camera' && [styles.modeButtonActive, { backgroundColor: theme.backgroundElement }]]}
+                onPress={() => setMode('camera')}>
+                <ThemedText type="link" style={{ color: mode === 'camera' ? theme.primaryDark : theme.faint }}>
+                  Camera
+                </ThemedText>
+              </Pressable>
             </View>
-          ) : (
-            <ThemedView type="backgroundElement" style={styles.permissionCard}>
-              <ThemedText themeColor="textSecondary" style={styles.centerText}>
-                {permission?.canAskAgain === false
-                  ? 'Camera access was denied. Enable it in system settings, or enter the sample ID below.'
-                  : 'Camera access is needed to scan a sample label.'}
-              </ThemedText>
-              {permission?.canAskAgain !== false && (
-                <Pressable
-                  style={[styles.button, { backgroundColor: theme.backgroundSelected }]}
-                  onPress={requestPermission}>
-                  <ThemedText type="smallBold">Allow camera</ThemedText>
-                </Pressable>
-              )}
-            </ThemedView>
-          )
-        ) : (
-          <ThemedView type="backgroundElement" style={styles.permissionCard}>
-            <ThemedText themeColor="textSecondary" style={styles.centerText}>
-              Camera scanning isn&apos;t available on this platform. Enter the sample ID below.
-            </ThemedText>
-          </ThemedView>
-        )}
+          )}
 
-        <ThemedView type="backgroundElement" style={styles.manualCard}>
-          <ThemedText type="small" themeColor="textSecondary">
-            Or enter the sample ID manually
-          </ThemedText>
-          <View style={styles.manualRow}>
-            <TextInput
-              style={[styles.input, { color: theme.text, borderColor: theme.backgroundSelected }]}
-              placeholder="e.g. LAB-24-0123"
-              placeholderTextColor={theme.textSecondary}
-              autoCapitalize="characters"
-              autoCorrect={false}
-              value={manualId}
-              onChangeText={setManualId}
-              onSubmitEditing={() => manualId.trim() && goToSample(manualId.trim())}
-            />
-            <Pressable
-              style={[styles.goButton, { backgroundColor: theme.backgroundSelected }]}
-              onPress={() => manualId.trim() && goToSample(manualId.trim())}>
-              <ThemedText type="smallBold">Go</ThemedText>
-            </Pressable>
-          </View>
-        </ThemedView>
+          {mode === 'nfc' && nfcSupported ? (
+            <Card style={styles.centerCard}>
+              <ThemedText themeColor="textSecondary" style={styles.centerText}>
+                {nfcStatus === 'scanning'
+                  ? 'Hold your phone near the sample tag…'
+                  : nfcStatus === 'resolving'
+                    ? 'Looking up sample…'
+                    : 'Tap the button, then hold your phone near the sample tag.'}
+              </ThemedText>
+              {nfcError && (
+                <ThemedText type="small" style={styles.errorText}>
+                  {nfcError}
+                </ThemedText>
+              )}
+              <Button label="Tap to scan" onPress={handleNfcScan} disabled={nfcStatus !== 'idle'} fullWidth={false} />
+            </Card>
+          ) : canUseCamera ? (
+            permission?.granted ? (
+              <View style={styles.cameraWrap}>
+                <CameraView
+                  style={styles.camera}
+                  facing="back"
+                  barcodeScannerSettings={{ barcodeTypes: ['qr', 'code128', 'code39', 'ean13'] }}
+                  onBarcodeScanned={handleBarcodeScanned}
+                />
+              </View>
+            ) : (
+              <Card style={styles.centerCard}>
+                <ThemedText themeColor="textSecondary" style={styles.centerText}>
+                  {permission?.canAskAgain === false
+                    ? 'Camera access was denied. Enable it in system settings, or enter the sample ID below.'
+                    : 'Camera access is needed to scan a sample label.'}
+                </ThemedText>
+                {permission?.canAskAgain !== false && (
+                  <Button label="Allow camera" onPress={requestPermission} fullWidth={false} />
+                )}
+              </Card>
+            )
+          ) : (
+            <Card style={styles.centerCard}>
+              <ThemedText themeColor="textSecondary" style={styles.centerText}>
+                Camera scanning isn&apos;t available on this platform. Enter the sample ID below.
+              </ThemedText>
+            </Card>
+          )}
+
+          <Card style={styles.manualCard}>
+            <ThemedText type="small" themeColor="textSecondary">
+              Or enter the sample ID manually
+            </ThemedText>
+            <View style={styles.manualRow}>
+              <TextInput
+                style={[styles.input, { color: theme.text, borderColor: theme.border }]}
+                placeholder="e.g. LAB-24-0123"
+                placeholderTextColor={theme.faint}
+                autoCapitalize="characters"
+                autoCorrect={false}
+                value={manualId}
+                onChangeText={setManualId}
+                onSubmitEditing={() => manualId.trim() && goToSample(manualId.trim())}
+              />
+              <Pressable
+                style={[styles.goButton, { backgroundColor: theme.primarySoft }]}
+                onPress={() => manualId.trim() && goToSample(manualId.trim())}>
+                <ThemedText type="link" style={{ color: theme.primaryDark }}>
+                  Go
+                </ThemedText>
+              </Pressable>
+            </View>
+          </Card>
+        </View>
       </SafeAreaView>
     </ThemedView>
   );
@@ -193,38 +194,46 @@ const styles = StyleSheet.create({
   },
   safeArea: {
     flex: 1,
+  },
+  headerBar: {
+    paddingHorizontal: Spacing.three,
+    paddingTop: Spacing.two,
+    paddingBottom: Spacing.three,
+    borderBottomWidth: 1,
+  },
+  body: {
+    flex: 1,
     padding: Spacing.three,
     gap: Spacing.three,
   },
-  title: {
-    textAlign: 'center',
-  },
   modeRow: {
     flexDirection: 'row',
-    gap: Spacing.two,
     alignSelf: 'center',
+    borderRadius: Radius.md,
+    padding: 3,
+    gap: 3,
   },
   modeButton: {
-    borderRadius: Spacing.two,
+    borderRadius: Radius.sm,
     paddingHorizontal: Spacing.four,
-    paddingVertical: Spacing.one,
+    paddingVertical: Spacing.one + 2,
   },
+  modeButtonActive: {},
   errorText: {
-    color: '#e5484d',
+    color: '#D0021B',
     textAlign: 'center',
   },
   cameraWrap: {
     flex: 1,
-    borderRadius: Spacing.three,
+    borderRadius: Radius.lg,
     overflow: 'hidden',
+    backgroundColor: '#0B1418',
   },
   camera: {
     flex: 1,
   },
-  permissionCard: {
+  centerCard: {
     flex: 1,
-    borderRadius: Spacing.three,
-    padding: Spacing.four,
     gap: Spacing.three,
     justifyContent: 'center',
     alignItems: 'center',
@@ -232,14 +241,7 @@ const styles = StyleSheet.create({
   centerText: {
     textAlign: 'center',
   },
-  button: {
-    borderRadius: Spacing.two,
-    paddingVertical: Spacing.two,
-    paddingHorizontal: Spacing.four,
-  },
   manualCard: {
-    borderRadius: Spacing.three,
-    padding: Spacing.three,
     gap: Spacing.two,
   },
   manualRow: {
@@ -249,13 +251,13 @@ const styles = StyleSheet.create({
   input: {
     flex: 1,
     borderWidth: 1,
-    borderRadius: Spacing.two,
+    borderRadius: Radius.sm,
     paddingHorizontal: Spacing.three,
     paddingVertical: Spacing.two,
     fontSize: 16,
   },
   goButton: {
-    borderRadius: Spacing.two,
+    borderRadius: Radius.sm,
     paddingHorizontal: Spacing.four,
     justifyContent: 'center',
     alignItems: 'center',
