@@ -70,7 +70,7 @@ export default function SamplesScreen() {
   const theme = useTheme();
   const [query, setQuery] = useState('');
   const [status, setStatus] = useState('All');
-  const { data, isLoading, isError, refetch, isRefetching } = useSamples({ status, q: query });
+  const { data, isLoading, isError, error, refetch, isRefetching } = useSamples({ status, q: query });
 
   const samples = data?.samples ?? [];
   const statusCounts = useMemo(() => {
@@ -130,7 +130,7 @@ export default function SamplesScreen() {
           )}
           {isError && (
             <ThemedText type="small" style={styles.errorText}>
-              Couldn&apos;t load samples. Pull down to retry.
+              {error instanceof Error ? error.message : 'Could not load samples.'} Pull down to retry.
             </ThemedText>
           )}
           {!isLoading && samples.length === 0 && (

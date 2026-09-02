@@ -102,7 +102,7 @@ function QuickAction({ href, label, icon }: { href: '/scan' | '/samples' | '/not
 export default function HomeScreen() {
   const { user } = useAuth();
   const theme = useTheme();
-  const { data, isLoading, isError, refetch, isRefetching } = useDashboard();
+  const { data, isLoading, isError, error, refetch, isRefetching } = useDashboard();
 
   const firstName = user?.name.trim().split(/\s+/)[0] ?? '';
 
@@ -151,7 +151,7 @@ export default function HomeScreen() {
 
           {isError && (
             <ThemedText type="small" style={styles.errorText}>
-              Couldn&apos;t load the dashboard. Pull down to retry.
+              {error instanceof Error ? error.message : 'Could not load the dashboard.'} Pull down to retry.
             </ThemedText>
           )}
 

@@ -59,7 +59,7 @@ function NotificationRowItem({ item }: { item: NotificationRow }) {
 }
 
 export default function NotificationsScreen() {
-  const { data, isLoading, isError, refetch, isRefetching } = useNotifications();
+  const { data, isLoading, isError, error, refetch, isRefetching } = useNotifications();
   const markAllRead = useMarkAllNotificationsRead();
   const theme = useTheme();
 
@@ -91,7 +91,7 @@ export default function NotificationsScreen() {
 
           {isError && (
             <ThemedText type="small" style={styles.errorText}>
-              Couldn&apos;t load notifications. Pull down to retry.
+              {error instanceof Error ? error.message : 'Could not load notifications.'} Pull down to retry.
             </ThemedText>
           )}
 
